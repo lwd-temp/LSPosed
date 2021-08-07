@@ -39,13 +39,13 @@ import org.lsposed.lspd.BuildConfig;
 import org.lsposed.lspd.ILSPManagerService;
 import org.lsposed.lspd.models.Application;
 import org.lsposed.lspd.models.UserInfo;
-import org.lsposed.lspd.utils.ParceledListSlice;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.LinkedList;
 import java.util.List;
 
 import de.robv.android.xposed.XposedBridge;
+import io.github.xposed.xposedservice.utils.ParceledListSlice;
 
 public class LSPManagerService extends ILSPManagerService.Stub {
 
@@ -124,7 +124,7 @@ public class LSPManagerService extends ILSPManagerService.Stub {
     public boolean enableModule(String packageName) throws RemoteException {
         PackageInfo pkgInfo = PackageService.getPackageInfo(packageName, PackageService.MATCH_ALL_FLAGS, 0);
         if (pkgInfo == null) return false;
-        return ConfigManager.getInstance().enableModule(packageName, pkgInfo.applicationInfo.sourceDir);
+        return ConfigManager.getInstance().enableModule(packageName, pkgInfo.applicationInfo);
     }
 
     @Override

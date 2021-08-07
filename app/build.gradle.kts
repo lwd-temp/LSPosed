@@ -17,10 +17,11 @@
  * Copyright (C) 2021 LSPosed Contributors
  */
 
-import com.android.build.api.variant.impl.ApplicationVariantImpl
 import com.android.build.api.component.analytics.AnalyticsEnabledApplicationVariant
+import com.android.build.api.variant.impl.ApplicationVariantImpl
 import com.android.build.gradle.internal.dsl.BuildType
 import java.nio.file.Paths
+import java.time.Instant
 
 plugins {
     id("org.gradle.idea")
@@ -28,23 +29,10 @@ plugins {
     id("androidx.navigation.safeargs")
 }
 
-// workaround for AS.
-val dataBinding = file("${project.buildDir}/generated/data_binding_base_class_source_out/debug/out")
-sourceSets {
-    create("dataBinding") {
-        java.srcDir(dataBinding)
-    }
-}
-idea {
-    module {
-        generatedSourceDirs.add(dataBinding)
-    }
-}
-
 val androidTargetSdkVersion: Int by rootProject.extra
 val androidMinSdkVersion: Int by rootProject.extra
 val androidBuildToolsVersion: String by rootProject.extra
-val androidCompileSdkVersion: String by rootProject.extra
+val androidCompileSdkVersion: Int by rootProject.extra
 val androidCompileNdkVersion: String by rootProject.extra
 val androidSourceCompatibility: JavaVersion by rootProject.extra
 val androidTargetCompatibility: JavaVersion by rootProject.extra
@@ -58,7 +46,7 @@ val androidKeyAlias: String? by rootProject
 val androidKeyPassword: String? by rootProject
 
 android {
-    compileSdkPreview = androidCompileSdkVersion
+    compileSdk = androidCompileSdkVersion
     ndkVersion = androidCompileNdkVersion
     buildToolsVersion = androidBuildToolsVersion
 
@@ -74,20 +62,10 @@ android {
         versionCode = verCode
         versionName = verName
         resourceConfigurations += arrayOf(
-            "en",
-            "zh-rCN",
-            "zh-rTW",
-            "zh-rHK",
-            "ru",
-            "uk",
-            "nl",
-            "ko",
-            "fr",
-            "de",
-            "it",
-            "pt",
-            "es",
+            "en", "zh-rCN", "zh-rTW", "zh-rHK", "ru", "uk", "nl", "ko", "fr", "de",
+            "it", "pt", "es", "jp",
         )
+        buildConfigField("long", "BUILD_TIME", Instant.now().epochSecond.toString())
     }
 
     compileOptions {
@@ -97,7 +75,6 @@ android {
 
     lint {
         disable += "MissingTranslation"
-        disable += "ExtraTranslation"
         isAbortOnError = true
         isCheckReleaseBuilds = false
     }
@@ -198,23 +175,21 @@ tasks.whenTaskAdded {
 
 dependencies {
     val glideVersion = "4.12.0"
-    val markwonVersion = "4.6.2"
     val okhttpVersion = "4.9.1"
     val navVersion = "2.3.5"
     annotationProcessor("com.github.bumptech.glide:compiler:$glideVersion")
-    implementation("androidx.activity:activity:1.2.3")
+    implementation("androidx.activity:activity:1.3.1")
     implementation("androidx.browser:browser:1.3.0")
-    implementation("androidx.constraintlayout:constraintlayout:2.0.4")
-    implementation("androidx.core:core:1.5.0")
-    implementation("androidx.fragment:fragment:1.3.4")
+    implementation("androidx.constraintlayout:constraintlayout:2.1.0")
+    implementation("androidx.core:core:1.6.0")
+    implementation("androidx.fragment:fragment:1.3.6")
     implementation("androidx.navigation:navigation-fragment:$navVersion")
     implementation("androidx.navigation:navigation-ui:$navVersion")
     implementation("androidx.recyclerview:recyclerview:1.2.1")
+    implementation("androidx.slidingpanelayout:slidingpanelayout:1.2.0-alpha03")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
-    implementation("com.caverock:androidsvg-aar:1.4")
     implementation("com.github.bumptech.glide:glide:$glideVersion")
-    implementation("com.github.bumptech.glide:okhttp3-integration:$glideVersion")
-    implementation("com.google.android.material:material:1.3.0")
+    implementation("com.google.android.material:material:1.4.0")
     implementation("com.google.code.gson:gson:2.8.7")
     implementation("com.takisoft.preferencex:preferencex:1.1.0")
     implementation("com.takisoft.preferencex:preferencex-colorpicker:1.1.0")
@@ -230,15 +205,8 @@ dependencies {
     implementation("dev.rikka.rikkax.widget:borderview:1.0.1")
     implementation("dev.rikka.rikkax.widget:switchbar:1.0.2")
     implementation("dev.rikka.rikkax.layoutinflater:layoutinflater:1.0.1")
-    implementation("io.noties.markwon:core:$markwonVersion")
-    implementation("io.noties.markwon:ext-strikethrough:$markwonVersion")
-    implementation("io.noties.markwon:ext-tables:$markwonVersion")
-    implementation("io.noties.markwon:ext-tasklist:$markwonVersion")
-    implementation("io.noties.markwon:html:$markwonVersion")
-    implementation("io.noties.markwon:image-glide:$markwonVersion")
-    implementation("io.noties.markwon:linkify:$markwonVersion")
     implementation("me.zhanghai.android.appiconloader:appiconloader-glide:1.3.1")
-    implementation("me.zhanghai.android.fastscroll:library:1.1.6")
+    implementation("me.zhanghai.android.fastscroll:library:1.1.7")
     implementation("org.lsposed.hiddenapibypass:hiddenapibypass:2.0")
     implementation(project(":manager-service"))
 }

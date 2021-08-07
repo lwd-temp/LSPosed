@@ -30,7 +30,6 @@ import android.view.ViewGroup;
 import android.widget.Filter;
 import android.widget.Filterable;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -42,7 +41,6 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.snackbar.Snackbar;
 
 import org.lsposed.manager.App;
-import org.lsposed.manager.ConfigManager;
 import org.lsposed.manager.R;
 import org.lsposed.manager.databinding.FragmentRepoBinding;
 import org.lsposed.manager.databinding.ItemOnlinemoduleBinding;
@@ -107,15 +105,6 @@ public class RepoFragment extends BaseFragment implements RepoLoader.Listener {
     }
 
     @Override
-    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-        super.onViewCreated(view, savedInstanceState);
-        if (ConfigManager.getXposedVersionName() == null && !ConfigManager.isMagiskInstalled()) {
-            Toast.makeText(requireActivity(), R.string.lsposed_not_active, Toast.LENGTH_LONG).show();
-            getNavController().navigateUp();
-        }
-    }
-
-    @Override
     public void onPrepareOptionsMenu(Menu menu) {
         searchView = (SearchView) menu.findItem(R.id.menu_search).getActionView();
         searchView.setOnQueryTextListener(mSearchListener);
@@ -145,11 +134,6 @@ public class RepoFragment extends BaseFragment implements RepoLoader.Listener {
             binding.progress.hide();
             adapter.setData(repoLoader.getOnlineModules());
         });
-    }
-
-    @Override
-    public void moduleReleasesLoaded(OnlineModule module) {
-
     }
 
     @Override
@@ -202,9 +186,7 @@ public class RepoFragment extends BaseFragment implements RepoLoader.Listener {
                 sb.append(summary);
             }
             holder.appDescription.setText(sb);
-            holder.itemView.setOnClickListener(v -> {
-                getNavController().navigate(RepoFragmentDirections.actionRepoFragmentToRepoItemFragment(module.getName(), module.getDescription()));
-            });
+            holder.itemView.setOnClickListener(v -> getNavController().navigate(RepoFragmentDirections.actionRepoFragmentToRepoItemFragment(module.getName(), module.getDescription())));
         }
 
         @Override

@@ -36,12 +36,10 @@ import org.lsposed.lspd.deopt.PrebuiltMethodsDeopter;
 import org.lsposed.lspd.hooker.CrashDumpHooker;
 import org.lsposed.lspd.hooker.HandleBindAppHooker;
 import org.lsposed.lspd.hooker.LoadedApkCstrHooker;
-import org.lsposed.lspd.hooker.StartBootstrapServicesHooker;
 import org.lsposed.lspd.hooker.SystemMainHooker;
 import org.lsposed.lspd.service.ServiceManager;
 import org.lsposed.lspd.util.ModuleLogger;
 import org.lsposed.lspd.util.Utils;
-import org.lsposed.lspd.util.Versions;
 import org.lsposed.lspd.yahfa.hooker.YahfaHooker;
 
 import java.io.File;
@@ -68,16 +66,6 @@ public class Main {
                 ActivityThread.class, ApplicationInfo.class, CompatibilityInfo.class,
                 ClassLoader.class, boolean.class, boolean.class, boolean.class,
                 new LoadedApkCstrHooker());
-    }
-
-    public static void startSystemServerHook() {
-        StartBootstrapServicesHooker sbsHooker = new StartBootstrapServicesHooker();
-        Object[] paramTypesAndCallback = Versions.hasR() ?
-                new Object[]{"com.android.server.utils.TimingsTraceAndSlog", sbsHooker} :
-                new Object[]{sbsHooker};
-        XposedHelpers.findAndHookMethod("com.android.server.SystemServer",
-                SystemMainHooker.systemServerCL,
-                "startBootstrapServices", paramTypesAndCallback);
     }
 
     private static void installBootstrapHooks(boolean isSystem, String appDataDir) {

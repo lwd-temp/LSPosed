@@ -41,11 +41,13 @@ import android.content.res.XResources;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.Process;
+import android.os.SharedMemory;
 import android.util.ArraySet;
 import android.util.Log;
 
 import org.lsposed.lspd.nativebridge.NativeAPI;
 import org.lsposed.lspd.nativebridge.ResourcesHook;
+import org.lsposed.lspd.util.LspModuleClassLoader;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -59,7 +61,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import dalvik.system.DelegateLastClassLoader;
 import de.robv.android.xposed.callbacks.XC_InitPackageResources;
 import de.robv.android.xposed.callbacks.XC_InitZygote;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
@@ -221,12 +222,15 @@ public final class XposedInit {
         synchronized (moduleLoadLock) {
             var moduleList = serviceClient.getModulesList();
             ArraySet<String> newLoadedApk = new ArraySet<>();
-            moduleList.forEach((name, apk) -> {
+            moduleList.forEach(module -> {
+                var apk = module.apk;
+                var name = module.name;
+                var dexes = module.config.preLoadedDexes;
                 if (loadedModules.contains(apk)) {
                     newLoadedApk.add(apk);
                 } else {
                     loadedModules.add(apk); // temporarily add it for XSharedPreference
-                    boolean loadSuccess = loadModule(name, apk);
+                    boolean loadSuccess = loadModule(name, apk, dexes);
                     if (loadSuccess) {
                         newLoadedApk.add(apk);
                     }
@@ -359,7 +363,7 @@ public final class XposedInit {
      * in <code>assets/xposed_init</code>.
      */
     @SuppressLint("PrivateApi")
-    private static boolean loadModule(String name, String apk) {
+    private static boolean loadModule(String name, String apk, SharedMemory[] dexes) {
         Log.i(TAG, "Loading module " + name + " from " + apk);
 
         if (!new File(apk).exists()) {
@@ -367,14 +371,13 @@ public final class XposedInit {
             return false;
         }
 
-        // module can load it's own so
-        StringBuilder nativePath = new StringBuilder();
-        for (String i : Build.SUPPORTED_ABIS) {
-            nativePath.append(apk).append("!/lib/").append(i).append(File.pathSeparator);
+        var librarySearchPath = new StringBuilder();
+        var abis = Process.is64Bit() ? Build.SUPPORTED_64_BIT_ABIS : Build.SUPPORTED_32_BIT_ABIS;
+        for (String abi : abis) {
+            librarySearchPath.append(apk).append("!/lib/").append(abi).append(File.pathSeparator);
         }
-        // Log.d(TAG, "Allowed native path" + nativePath.toString());
         ClassLoader initLoader = XposedInit.class.getClassLoader();
-        ClassLoader mcl = new DelegateLastClassLoader(apk, nativePath.toString(), initLoader);
+        ClassLoader mcl = LspModuleClassLoader.loadApk(new File(apk), dexes, librarySearchPath.toString(), initLoader);
 
         try {
             if (mcl.loadClass(XposedBridge.class.getName()).getClassLoader() != initLoader) {
@@ -387,7 +390,7 @@ public final class XposedInit {
         } catch (ClassNotFoundException ignored) {
         }
 
-        return initNativeModule(mcl, apk) && initModule(mcl, name, apk);
+        return initNativeModule(mcl, name) && initModule(mcl, name, apk);
     }
 
     public final static HashSet<String> loadedPackagesInProcess = new HashSet<>(1);

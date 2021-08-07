@@ -26,9 +26,12 @@ import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.IBinder;
 import android.widget.Toast;
 
 import com.android.apksig.ApkVerifier;
+
+import org.lsposed.lspd.service.ServiceManager;
 
 import java.io.File;
 import java.util.Arrays;
@@ -37,11 +40,15 @@ import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
 
 public class InstallerVerifier {
-    public static boolean verifyInstallerSignature(ApplicationInfo appInfo) {
-        ApkVerifier verifier = new ApkVerifier.Builder(new File(appInfo.sourceDir))
+    public static boolean verifyInstallerSignature(String path) {
+        ApkVerifier verifier = new ApkVerifier.Builder(new File(path))
                 .setMinCheckedPlatformVersion(27)
                 .build();
         try {
+            var appInfo = ServiceManager.getSystemContext().getPackageManager().getPackageArchiveInfo(path, 0).applicationInfo;
+            if ((appInfo.flags & ApplicationInfo.FLAG_TEST_ONLY) != 0) {
+                return true;
+            }
             ApkVerifier.Result result = verifier.verify();
             if (!result.isVerified()) {
                 return false;
@@ -70,6 +77,17 @@ public class InstallerVerifier {
             });
         } catch (Throwable t) {
             Utils.logW("hookXposedInstaller: ", t);
+        }
+    }
+
+    public static void hookXposedInstaller(final ClassLoader classLoader, IBinder binder) {
+        Utils.logI("Found LSPosed Manager, hooking it");
+        try {
+            var clazz = XposedHelpers.findClass("org.lsposed.manager.Constants", classLoader);
+            XposedHelpers.callStaticMethod(clazz, "setBinder", new Class[]{IBinder.class}, binder);
+            Utils.logI("Hooked LSPosed Manager");
+        } catch (Throwable t) {
+            Utils.logW("Could not hook LSPosed Manager", t);
         }
     }
 }
