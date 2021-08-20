@@ -67,7 +67,7 @@ import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.snackbar.Snackbar;
 
 import org.lsposed.lspd.models.Application;
-import org.lsposed.manager.App;
+import org.lsposed.manager.ui.activity.MainActivity;
 import org.lsposed.manager.BuildConfig;
 import org.lsposed.manager.ConfigManager;
 import org.lsposed.manager.R;
@@ -146,7 +146,7 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
         HandlerThread handlerThread = new HandlerThread("appList");
         handlerThread.start();
         loadAppListHandler = new Handler(handlerThread.getLooper(), this);
-        preferences = App.getPreferences();
+        preferences = MainActivity.getPreferences();
         pm = activity.getPackageManager();
     }
 
@@ -549,7 +549,7 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
             }
             return true;
         } catch (Exception e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
+            Log.e(MainActivity.TAG, Log.getStackTraceString(e));
             return false;
         }
     }

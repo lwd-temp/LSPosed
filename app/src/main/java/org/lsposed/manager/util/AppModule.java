@@ -32,6 +32,7 @@ import com.bumptech.glide.Registry;
 import com.bumptech.glide.annotation.GlideModule;
 import com.bumptech.glide.module.AppGlideModule;
 
+import org.lsposed.manager.ui.activity.MainActivity;
 import org.lsposed.manager.R;
 
 @GlideModule
@@ -43,7 +44,7 @@ public class AppModule extends AppGlideModule {
 
     @Override
     public void registerComponents(Context context, @NonNull Glide glide, Registry registry) {
-        int iconSize = context.getResources().getDimensionPixelSize(R.dimen.app_icon_size);
+        int iconSize = MainActivity.getInstance().getResources().getDimensionPixelSize(R.dimen.app_icon_size);
         var info = context.getApplicationInfo();
         var pm = context.getPackageManager();
         var shrinkNonAdaptiveIcons = info.loadIcon(pm) instanceof AdaptiveIconDrawable;

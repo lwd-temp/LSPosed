@@ -20,37 +20,108 @@
 
 package org.lsposed.manager.ui.activity.base;
 
+import android.app.Application;
+import android.content.ComponentName;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
+import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Window;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import androidx.preference.PreferenceManager;
 
-import org.lsposed.manager.App;
 import org.lsposed.manager.BuildConfig;
 import org.lsposed.manager.ConfigManager;
 import org.lsposed.manager.R;
 import org.lsposed.manager.util.NavUtil;
 import org.lsposed.manager.util.theme.ThemeUtil;
 
+import java.lang.reflect.Method;
+import java.util.Locale;
+
 import rikka.core.res.ResourcesKt;
 import rikka.material.app.MaterialActivity;
 
 public class BaseActivity extends MaterialActivity {
 
-    protected static SharedPreferences preferences;
+    private static SharedPreferences preferences = null;
 
-    static {
-        preferences = App.getPreferences();
+    private Resources res = null;
+    private ApplicationInfo appInfo = null;
+
+    @Override
+    public ClassLoader getClassLoader() {
+        return BaseActivity.class.getClassLoader();
+    }
+
+    @Override
+    public Resources getResources() {
+        if (res == null && getIntent() != null && getIntent().hasExtra("apk")) {
+            try {
+                AssetManager am = AssetManager.class.newInstance();
+                Method addAssetPath = AssetManager.class.getDeclaredMethod("addAssetPath", String.class);
+                addAssetPath.setAccessible(true);
+                // TODO: may use classpath
+                addAssetPath.invoke(am, getIntent().getStringExtra("apk"));
+                res = new Resources(am, super.getResources().getDisplayMetrics(), super.getResources().getConfiguration());
+            } catch (Throwable e) {
+                Log.e("LSPosedManager", "get res", e);
+            }
+
+        }
+        if (res != null) {
+            return res;
+        }
+        return super.getResources();
+    }
+
+    @Override
+    public ComponentName getComponentName() {
+        if (getIntent() != null && getIntent().hasExtra("apk")) {
+            return ComponentName.unflattenFromString("com.android.settings/org.lsposed.manager.ui.activity.MainActivity");
+        }
+        return super.getComponentName();
+    }
+
+    @Override
+    public ApplicationInfo getApplicationInfo() {
+        if (appInfo == null && getIntent() != null && getIntent().hasExtra("apk")) {
+            var pkgInfo = getPackageManager().getPackageArchiveInfo(getIntent().getStringExtra("apk"), 0);
+            appInfo = pkgInfo != null ? pkgInfo.applicationInfo : null;
+        }
+        if (appInfo != null) {
+            return appInfo;
+        }
+        return super.getApplicationInfo();
+    }
+
+    public static SharedPreferences getPreferences() {
+        if (preferences == null) {
+            try {
+                var app = (Application) Class.forName("android.app.ActivityThread").getDeclaredMethod("currentApplication").invoke(null);
+                preferences = PreferenceManager.getDefaultSharedPreferences(app);
+                if ("CN".equals(Locale.getDefault().getCountry())) {
+                    if (!preferences.contains("doh")) {
+                        preferences.edit().putBoolean("doh", true).apply();
+                    }
+                }
+            } catch (Throwable e) {
+                throw new RuntimeException(e);
+            }
+        }
+        return preferences;
     }
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
+        setTheme(R.style.AppTheme);
         super.onCreate(savedInstanceState);
         // make sure the versions are consistent
         if (BuildConfig.DEBUG) return;

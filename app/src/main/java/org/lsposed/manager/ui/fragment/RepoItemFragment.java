@@ -51,7 +51,7 @@ import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 
-import org.lsposed.manager.App;
+import org.lsposed.manager.ui.activity.MainActivity;
 import org.lsposed.manager.R;
 import org.lsposed.manager.databinding.FragmentPagerBinding;
 import org.lsposed.manager.databinding.ItemRepoLoadmoreBinding;
@@ -91,7 +91,7 @@ public class RepoItemFragment extends BaseFragment implements RepoLoader.Listene
 
     private static String readWebviewHTML(String name) {
         try {
-            var input = App.getInstance().getAssets().open("webview/" + name);
+            var input = MainActivity.getInstance().getResources().getAssets().open("webview/" + name);
             var result = new ByteArrayOutputStream(1024);
             var buffer = new byte[1024];
             for (int length; (length = input.read(buffer)) != -1; ) {
@@ -99,7 +99,7 @@ public class RepoItemFragment extends BaseFragment implements RepoLoader.Listene
             }
             return result.toString(StandardCharsets.UTF_8.name());
         } catch (IOException e) {
-            Log.e(App.TAG, "read webview HTML", e);
+            Log.e(MainActivity.TAG, "read webview HTML", e);
             return "<html><body>@body@</body></html>";
         }
     }
@@ -188,7 +188,7 @@ public class RepoItemFragment extends BaseFragment implements RepoLoader.Listene
             view.loadDataWithBaseURL("https://github.com", body, "text/html",
                     StandardCharsets.UTF_8.name(), null);
         } catch (Throwable e) {
-            Log.e(App.TAG, "render readme", e);
+            Log.e(MainActivity.TAG, "render readme", e);
         }
     }
 

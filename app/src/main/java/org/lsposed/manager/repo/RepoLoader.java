@@ -26,7 +26,7 @@ import androidx.annotation.NonNull;
 
 import com.google.gson.Gson;
 
-import org.lsposed.manager.App;
+import org.lsposed.manager.ui.activity.MainActivity;
 import org.lsposed.manager.repo.model.OnlineModule;
 
 import java.io.IOException;
@@ -50,7 +50,7 @@ import okhttp3.ResponseBody;
 public class RepoLoader {
     private static RepoLoader instance = null;
     private Map<String, OnlineModule> onlineModules = new HashMap<>();
-    private final Path repoFile = Paths.get(App.getInstance().getFilesDir().getAbsolutePath(), "repo.json");
+    private final Path repoFile = Paths.get(MainActivity.getInstance().getFilesDir().getAbsolutePath(), "repo.json");
     private final List<Listener> listeners = new CopyOnWriteArrayList<>();
     private boolean isLoading = false;
     private boolean repoLoaded = false;
@@ -77,12 +77,12 @@ public class RepoLoader {
             }
             isLoading = true;
         }
-        App.getOkHttpClient().newCall(new Request.Builder()
+        MainActivity.getOkHttpClient().newCall(new Request.Builder()
                 .url(repoUrl + "modules.json")
                 .build()).enqueue(new Callback() {
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                Log.e(App.TAG, Log.getStackTraceString(e));
+                Log.e(MainActivity.TAG, Log.getStackTraceString(e));
                 for (Listener listener : listeners) {
                     listener.onThrowable(e);
                 }
@@ -115,7 +115,7 @@ public class RepoLoader {
                                 repoLoaded = true;
                             }
                         } catch (Throwable t) {
-                            Log.e(App.TAG, Log.getStackTraceString(t));
+                            Log.e(MainActivity.TAG, Log.getStackTraceString(t));
                             for (Listener listener : listeners) {
                                 listener.onThrowable(t);
                             }
@@ -130,12 +130,12 @@ public class RepoLoader {
     }
 
     public void loadRemoteReleases(String packageName) {
-        App.getOkHttpClient().newCall(new Request.Builder()
+        MainActivity.getOkHttpClient().newCall(new Request.Builder()
                 .url(String.format(repoUrl + "module/%s.json", packageName))
                 .build()).enqueue(new Callback() {
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                Log.e(App.TAG, Log.getStackTraceString(e));
+                Log.e(MainActivity.TAG, Log.getStackTraceString(e));
                 if (!repoUrl.equals(backupRepoUrl)) {
                     repoUrl = backupRepoUrl;
                     loadRemoteReleases(packageName);
@@ -161,7 +161,7 @@ public class RepoLoader {
                                 listener.moduleReleasesLoaded(module);
                             }
                         } catch (Throwable t) {
-                            Log.e(App.TAG, Log.getStackTraceString(t));
+                            Log.e(MainActivity.TAG, Log.getStackTraceString(t));
                             for (Listener listener : listeners) {
                                 listener.onThrowable(t);
                             }
@@ -197,7 +197,7 @@ public class RepoLoader {
         }
 
         default void onThrowable(Throwable t) {
-            Log.e(App.TAG, "load repo failed", t);
+            Log.e(MainActivity.TAG, "load repo failed", t);
         }
     }
 }

@@ -38,7 +38,7 @@ import androidx.lifecycle.Lifecycle;
 
 import com.google.android.material.snackbar.Snackbar;
 
-import org.lsposed.manager.App;
+import org.lsposed.manager.ui.activity.MainActivity;
 import org.lsposed.manager.R;
 import org.lsposed.manager.databinding.FragmentCompileDialogBinding;
 
@@ -143,7 +143,7 @@ public class CompileDialogFragment extends AppCompatDialogFragment {
 
         @Override
         protected void onPostExecute(String result) {
-            Context context = App.getInstance();
+            Context context = MainActivity.getInstance();
             String text;
             if (result.length() == 0) {
                 text = context.getString(R.string.compile_failed);

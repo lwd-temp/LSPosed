@@ -41,12 +41,11 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.snackbar.Snackbar;
 import com.takisoft.preferencex.PreferenceFragmentCompat;
 
-import org.lsposed.manager.App;
+import org.lsposed.manager.ui.activity.MainActivity;
 import org.lsposed.manager.BuildConfig;
 import org.lsposed.manager.ConfigManager;
 import org.lsposed.manager.R;
 import org.lsposed.manager.databinding.FragmentSettingsBinding;
-import org.lsposed.manager.ui.activity.MainActivity;
 import org.lsposed.manager.util.BackupUtils;
 import org.lsposed.manager.util.theme.ThemeUtil;
 
@@ -192,7 +191,7 @@ public class SettingsFragment extends BaseFragment {
             Preference theme = findPreference("dark_theme");
             if (theme != null) {
                 theme.setOnPreferenceChangeListener((preference, newValue) -> {
-                    if (!App.getPreferences().getString("dark_theme", ThemeUtil.MODE_NIGHT_FOLLOW_SYSTEM).equals(newValue)) {
+                    if (!MainActivity.getPreferences().getString("dark_theme", ThemeUtil.MODE_NIGHT_FOLLOW_SYSTEM).equals(newValue)) {
                         DayNightDelegate.setDefaultNightMode(ThemeUtil.getDarkTheme((String) newValue));
                         MainActivity activity = (MainActivity) getActivity();
                         if (activity != null) {

@@ -34,7 +34,7 @@ import androidx.core.text.HtmlCompat;
 import com.bumptech.glide.Glide;
 import com.google.android.material.snackbar.Snackbar;
 
-import org.lsposed.manager.App;
+import org.lsposed.manager.ui.activity.MainActivity;
 import org.lsposed.manager.BuildConfig;
 import org.lsposed.manager.ConfigManager;
 import org.lsposed.manager.R;
@@ -81,7 +81,7 @@ public class HomeFragment extends BaseFragment {
 
         BaseActivity activity = (BaseActivity) requireActivity();
         boolean isBinderAlive = ConfigManager.isBinderAlive();
-        boolean needUpdate = App.needUpdate();
+        boolean needUpdate = MainActivity.needUpdate();
         binding.status.setOnClickListener(v -> {
             if (isBinderAlive && !needUpdate) {
                 new InfoDialogBuilder(activity).setTitle(R.string.info).show();

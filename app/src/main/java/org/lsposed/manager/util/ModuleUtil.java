@@ -29,7 +29,7 @@ import android.os.Build;
 import androidx.annotation.NonNull;
 import androidx.core.util.Pair;
 
-import org.lsposed.manager.App;
+import org.lsposed.manager.ui.activity.MainActivity;
 import org.lsposed.manager.ConfigManager;
 import org.lsposed.manager.repo.RepoLoader;
 import org.lsposed.manager.repo.model.OnlineModule;
@@ -52,7 +52,7 @@ public final class ModuleUtil {
     private boolean isReloading = false;
 
     private ModuleUtil() {
-        pm = App.getInstance().getPackageManager();
+        pm = MainActivity.getInstance().getPackageManager();
     }
 
     public static synchronized ModuleUtil getInstance() {

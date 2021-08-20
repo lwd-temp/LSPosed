@@ -40,7 +40,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.snackbar.Snackbar;
 
-import org.lsposed.manager.App;
+import org.lsposed.manager.ui.activity.MainActivity;
 import org.lsposed.manager.R;
 import org.lsposed.manager.databinding.FragmentRepoBinding;
 import org.lsposed.manager.databinding.ItemOnlinemoduleBinding;
@@ -107,7 +107,7 @@ public class RepoFragment extends BaseFragment implements RepoLoader.Listener {
     public void onPrepareOptionsMenu(Menu menu) {
         searchView = (SearchView) menu.findItem(R.id.menu_search).getActionView();
         searchView.setOnQueryTextListener(mSearchListener);
-        int sort = App.getPreferences().getInt("repo_sort", 0);
+        int sort = MainActivity.getPreferences().getInt("repo_sort", 0);
         if (sort == 0) {
             menu.findItem(R.id.item_sort_by_name).setChecked(true);
         } else if (sort == 1) {
@@ -150,11 +150,11 @@ public class RepoFragment extends BaseFragment implements RepoLoader.Listener {
             repoLoader.loadRemoteData();
         } else if (itemId == R.id.item_sort_by_name) {
             item.setChecked(true);
-            App.getPreferences().edit().putInt("repo_sort", 0).apply();
+            MainActivity.getPreferences().edit().putInt("repo_sort", 0).apply();
             adapter.setData(repoLoader.getOnlineModules());
         } else if (itemId == R.id.item_sort_by_update_time) {
             item.setChecked(true);
-            App.getPreferences().edit().putInt("repo_sort", 1).apply();
+            MainActivity.getPreferences().edit().putInt("repo_sort", 1).apply();
             adapter.setData(repoLoader.getOnlineModules());
         }
         return super.onOptionsItemSelected(item);
@@ -200,7 +200,7 @@ public class RepoFragment extends BaseFragment implements RepoLoader.Listener {
         public void setData(Collection<OnlineModule> modules) {
             fullList = new ArrayList<>(modules);
             fullList = fullList.stream().filter((onlineModule -> !onlineModule.isHide() && !onlineModule.getReleases().isEmpty())).collect(Collectors.toList());
-            int sort = App.getPreferences().getInt("repo_sort", 0);
+            int sort = MainActivity.getPreferences().getInt("repo_sort", 0);
             if (sort == 0) {
                 fullList.sort((o1, o2) -> labelComparator.compare(o1.getDescription(), o2.getDescription()));
             } else if (sort == 1) {

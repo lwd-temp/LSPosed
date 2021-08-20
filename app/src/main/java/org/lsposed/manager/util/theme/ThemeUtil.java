@@ -26,7 +26,7 @@ import android.os.Build;
 import androidx.annotation.ColorRes;
 import androidx.annotation.StyleRes;
 
-import org.lsposed.manager.App;
+import org.lsposed.manager.ui.activity.MainActivity;
 import org.lsposed.manager.R;
 
 import java.util.HashMap;
@@ -44,7 +44,7 @@ public class ThemeUtil {
     public static final String MODE_NIGHT_YES = "MODE_NIGHT_YES";
 
     static {
-        preferences = App.getPreferences();
+        preferences = MainActivity.getPreferences();
         colorThemeMap.put("COLOR_PRIMARY", R.style.ThemeOverlay_color_primary);
         colorThemeMap.put("MATERIAL_RED", R.style.ThemeOverlay_material_red);
         colorThemeMap.put("MATERIAL_PINK", R.style.ThemeOverlay_material_pink);

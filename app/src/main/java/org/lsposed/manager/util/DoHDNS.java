@@ -22,7 +22,7 @@ package org.lsposed.manager.util;
 
 import androidx.annotation.NonNull;
 
-import org.lsposed.manager.App;
+import org.lsposed.manager.ui.activity.MainActivity;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -50,7 +50,7 @@ public class DoHDNS implements Dns {
     @NonNull
     @Override
     public List<InetAddress> lookup(@NonNull String hostname) throws UnknownHostException {
-        if (App.getPreferences().getBoolean("doh", false)) {
+        if (MainActivity.getPreferences().getBoolean("doh", false)) {
             try {
                 return cloudflare.lookup(hostname);
             } catch (UnknownHostException e) {

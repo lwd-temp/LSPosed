@@ -24,6 +24,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -33,11 +34,32 @@ import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
 import androidx.navigation.fragment.NavHostFragment;
 
+import com.google.gson.JsonParser;
+
+import org.lsposed.manager.BuildConfig;
 import org.lsposed.manager.ConfigManager;
 import org.lsposed.manager.NavGraphDirections;
 import org.lsposed.manager.R;
 import org.lsposed.manager.databinding.ActivityMainBinding;
+import org.lsposed.manager.repo.RepoLoader;
 import org.lsposed.manager.ui.activity.base.BaseActivity;
+import org.lsposed.manager.util.DoHDNS;
+import org.lsposed.manager.util.theme.ThemeUtil;
+
+import java.io.File;
+import java.io.IOException;
+import java.time.Instant;
+import java.time.ZoneOffset;
+
+import okhttp3.Cache;
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.logging.HttpLoggingInterceptor;
+import rikka.material.app.DayNightDelegate;
+
 
 public class MainActivity extends BaseActivity {
     private static final String KEY_PREFIX = MainActivity.class.getName() + '.';
@@ -45,6 +67,93 @@ public class MainActivity extends BaseActivity {
     private boolean restarting;
     private ActivityMainBinding binding;
 
+    public static final String TAG = "LSPosedManager";
+    @SuppressLint("StaticFieldLeak")
+    private static MainActivity instance = null;
+    private static OkHttpClient okHttpClient;
+    private static Cache okHttpCache;
+
+
+    public static MainActivity getInstance() {
+        return instance;
+    }
+
+    @NonNull
+    public static OkHttpClient getOkHttpClient() {
+        if (okHttpClient == null) {
+            OkHttpClient.Builder builder = new OkHttpClient.Builder().cache(getOkHttpCache());
+            builder.addInterceptor(chain -> {
+                var request = chain.request().newBuilder();
+                request.header("User-Agent", TAG);
+                return chain.proceed(request.build());
+            });
+            HttpLoggingInterceptor log = new HttpLoggingInterceptor();
+            log.setLevel(HttpLoggingInterceptor.Level.HEADERS);
+            if (BuildConfig.DEBUG) builder.addInterceptor(log);
+            okHttpClient = builder.dns(new DoHDNS(builder.build())).build();
+        }
+        return okHttpClient;
+    }
+
+    @NonNull
+    private static Cache getOkHttpCache() {
+        if (okHttpCache == null) {
+            okHttpCache = new Cache(new File(MainActivity.getInstance().getCacheDir(), "http_cache"), 50L * 1024L * 1024L);
+        }
+        return okHttpCache;
+    }
+
+    private void loadRemoteVersion() {
+        var request = new Request.Builder()
+                .url("https://api.github.com/repos/LSPosed/LSPosed/releases/latest")
+                .addHeader("Accept", "application/vnd.github.v3+json")
+                .build();
+        var callback = new Callback() {
+            @Override
+            public void onResponse(@NonNull Call call, @NonNull Response response) {
+                if (!response.isSuccessful()) return;
+                var body = response.body();
+                if (body == null) return;
+                try {
+                    var info = JsonParser.parseReader(body.charStream()).getAsJsonObject();
+                    var name = info.getAsJsonArray("assets").get(0).getAsJsonObject().get("name").getAsString();
+                    var code = Integer.parseInt(name.split("-", 4)[2]);
+                    var now = Instant.now().getEpochSecond();
+                    getPreferences().edit()
+                            .putInt("latest_version", code)
+                            .putLong("latest_check", now)
+                            .putBoolean("checked", true)
+                            .apply();
+                } catch (Throwable t) {
+                    Log.e(MainActivity.TAG, t.getMessage(), t);
+                }
+            }
+
+            @Override
+            public void onFailure(@NonNull Call call, @NonNull IOException e) {
+                Log.e(MainActivity.TAG, "loadRemoteVersion", e);
+                if (getPreferences().getBoolean("checked", false)) return;
+                getPreferences().edit().putBoolean("checked", true).apply();
+            }
+        };
+        getOkHttpClient().newCall(request).enqueue(callback);
+    }
+
+    public static boolean needUpdate() {
+        var pref = getPreferences();
+        if (!pref.getBoolean("checked", false)) return false;
+        var now = Instant.now();
+        var buildTime = Instant.ofEpochSecond(BuildConfig.BUILD_TIME);
+        var check = pref.getLong("latest_check", 0);
+        if (check > 0) {
+            var checkTime = Instant.ofEpochSecond(check);
+            if (checkTime.atOffset(ZoneOffset.UTC).plusDays(30).toInstant().isBefore(now))
+                return true;
+            var code = pref.getInt("latest_version", 0);
+            return code > BuildConfig.VERSION_CODE;
+        }
+        return buildTime.atOffset(ZoneOffset.UTC).plusDays(30).toInstant().isBefore(now);
+    }
     @NonNull
     public static Intent newIntent(@NonNull Context context) {
         return new Intent(context, MainActivity.class);
@@ -63,6 +172,13 @@ public class MainActivity extends BaseActivity {
         }
         super.onCreate(savedInstanceState);
 
+        instance = this;
+
+        DayNightDelegate.setApplicationContext(this);
+        DayNightDelegate.setDefaultNightMode(ThemeUtil.getDarkTheme());
+
+        loadRemoteVersion();
+        RepoLoader.getInstance().loadRemoteData();
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
