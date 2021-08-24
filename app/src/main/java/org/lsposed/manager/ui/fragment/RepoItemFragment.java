@@ -180,8 +180,7 @@ public class RepoItemFragment extends BaseFragment implements RepoLoader.Listene
             view.setWebViewClient(new WebViewClient() {
                 @Override
                 public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                    Intent i = new Intent(Intent.ACTION_VIEW, request.getUrl());
-                    startActivity(i);
+                    NavUtil.startURL(requireActivity(), request.getUrl());
                     return true;
                 }
             });
@@ -451,7 +450,6 @@ public class RepoItemFragment extends BaseFragment implements RepoLoader.Listene
                     if (insets != null)
                         holder.recyclerView.onApplyWindowInsets(insets);
                     RecyclerViewKt.fixEdgeEffect(holder.recyclerView, false, true);
-                    RecyclerViewKt.addFastScroller(holder.recyclerView, holder.itemView);
                     break;
             }
         }

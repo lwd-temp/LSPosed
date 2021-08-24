@@ -25,7 +25,6 @@ import static org.lsposed.lspd.service.ServiceManager.TAG;
 import android.app.IServiceConnection;
 import android.content.ComponentName;
 import android.content.Intent;
-import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -33,6 +32,7 @@ import android.content.pm.VersionedPackage;
 import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
+import android.os.ResultReceiver;
 import android.os.SystemProperties;
 import android.util.Log;
 
@@ -41,6 +41,7 @@ import org.lsposed.lspd.ILSPManagerService;
 import org.lsposed.lspd.models.Application;
 import org.lsposed.lspd.models.UserInfo;
 
+import java.io.FileDescriptor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.LinkedList;
 import java.util.List;
@@ -124,15 +125,8 @@ public class LSPManagerService extends ILSPManagerService.Stub {
     @Override
     public boolean enableModule(String packageName) throws RemoteException {
         PackageInfo pkgInfo = PackageService.getPackageInfo(packageName, PackageService.MATCH_ALL_FLAGS, 0);
-        if (pkgInfo != null) {
-            ApplicationInfo appInfo;
-            try {
-                appInfo = pkgInfo.applicationInfo;
-            } catch (Throwable t) {
-                Log.wtf(TAG, t);
-                throw t;
-            }
-            return ConfigManager.getInstance().enableModule(packageName, appInfo);
+        if (pkgInfo != null && pkgInfo.applicationInfo != null) {
+            return ConfigManager.getInstance().enableModule(packageName, pkgInfo.applicationInfo);
         } else {
             return false;
         }
@@ -182,7 +176,7 @@ public class LSPManagerService extends ILSPManagerService.Stub {
 
     @Override
     public ParcelFileDescriptor getModulesLog() {
-        return ConfigManager.getInstance().getModulesLog(ParcelFileDescriptor.MODE_READ_ONLY);
+        return ConfigManager.getInstance().getModulesLog();
     }
 
     @Override
@@ -201,8 +195,9 @@ public class LSPManagerService extends ILSPManagerService.Stub {
     }
 
     @Override
-    public void reboot(boolean confirm, String reason, boolean wait) throws RemoteException {
-        PowerService.reboot(confirm, reason, wait);
+    public void reboot(boolean shutdown) {
+        var value = shutdown ? "shutdown" : "reboot";
+        SystemProperties.set("sys.powerctl", value);
     }
 
     @Override
@@ -247,7 +242,7 @@ public class LSPManagerService extends ILSPManagerService.Stub {
     }
 
     @Override
-    public boolean systemServerRequested() throws RemoteException {
+    public boolean systemServerRequested() {
         return ServiceManager.systemServerRequested();
     }
 
@@ -271,9 +266,19 @@ public class LSPManagerService extends ILSPManagerService.Stub {
 
     @Override
     public boolean dex2oatFlagsLoaded() {
-//        var splitFlags = new ArrayList<>(Arrays.asList(flags.split(" ")));
-//        splitFlags.add(PROP_VALUE);
-//        SystemProperties.set(PROP_NAME, String.join(" ", splitFlags));
         return SystemProperties.get(PROP_NAME).contains(PROP_VALUE);
+    }
+
+    @Override
+    public void setHiddenIcon(boolean hide) {
+        var settings = new ServiceShellCommand("settings");
+        var enable = hide ? "0" : "1";
+        var args = new String[]{"put", "global", "show_hidden_icon_apps_enabled", enable};
+        try {
+            settings.shellCommand(FileDescriptor.in, FileDescriptor.out, FileDescriptor.err,
+                    args, new ResultReceiver(null));
+        } catch (RemoteException e) {
+            Log.w(TAG, "setHiddenIcon: ", e);
+        }
     }
 }

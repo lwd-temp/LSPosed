@@ -62,7 +62,7 @@ public class HomeFragment extends BaseFragment {
         packageInfo.applicationInfo = applicationInfo;
         packageInfo.versionCode = longVersionCode;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            packageInfo.setLongVersionCode(System.currentTimeMillis());
+            packageInfo.setLongVersionCode(longVersionCode);
         }
         return packageInfo;
     }
@@ -80,8 +80,10 @@ public class HomeFragment extends BaseFragment {
         super.onViewCreated(view, savedInstanceState);
 
         BaseActivity activity = (BaseActivity) requireActivity();
+        boolean isBinderAlive = ConfigManager.isBinderAlive();
+        boolean needUpdate = App.needUpdate();
         binding.status.setOnClickListener(v -> {
-            if (ConfigManager.isBinderAlive()) {
+            if (isBinderAlive && !needUpdate) {
                 new InfoDialogBuilder(activity).setTitle(R.string.info).show();
             } else {
                 NavUtil.startURL(activity, getString(R.string.about_source));
@@ -111,25 +113,25 @@ public class HomeFragment extends BaseFragment {
                 .load(wrap(activity.getApplicationInfo(), getResources().getConfiguration().hashCode()))
                 .into(binding.appIcon);
         int cardBackgroundColor;
-        if (ConfigManager.isBinderAlive()) {
+        if (isBinderAlive) {
             if (!ConfigManager.isSepolicyLoaded()) {
                 binding.statusTitle.setText(R.string.partial_activated);
-                cardBackgroundColor = ResourcesKt.resolveColor(activity.getTheme(), R.attr.colorWarning);
+                cardBackgroundColor = ResourcesKt.resolveColor(activity.getTheme(), rikka.material.R.attr.colorWarning);
                 binding.statusIcon.setImageResource(R.drawable.ic_warning);
                 binding.statusSummary.setText(R.string.selinux_policy_not_loaded_summary);
             } else if (!ConfigManager.systemServerRequested()) {
                 binding.statusTitle.setText(R.string.partial_activated);
-                cardBackgroundColor = ResourcesKt.resolveColor(activity.getTheme(), R.attr.colorWarning);
+                cardBackgroundColor = ResourcesKt.resolveColor(activity.getTheme(), rikka.material.R.attr.colorWarning);
                 binding.statusIcon.setImageResource(R.drawable.ic_warning);
                 binding.statusSummary.setText(R.string.system_inject_fail_summary);
             } else if (!ConfigManager.dex2oatFlagsLoaded()) {
                 binding.statusTitle.setText(R.string.partial_activated);
-                cardBackgroundColor = ResourcesKt.resolveColor(activity.getTheme(), R.attr.colorWarning);
+                cardBackgroundColor = ResourcesKt.resolveColor(activity.getTheme(), rikka.material.R.attr.colorWarning);
                 binding.statusIcon.setImageResource(R.drawable.ic_warning);
                 binding.statusSummary.setText(R.string.system_prop_incorrect_summary);
-            } else if (App.needUpdate()) {
+            } else if (needUpdate) {
                 binding.statusTitle.setText(R.string.need_update);
-                cardBackgroundColor = ResourcesKt.resolveColor(activity.getTheme(), R.attr.colorWarning);
+                cardBackgroundColor = ResourcesKt.resolveColor(activity.getTheme(), rikka.material.R.attr.colorWarning);
                 binding.statusIcon.setImageResource(R.drawable.ic_warning);
                 binding.statusSummary.setText(R.string.please_update_summary);
             } else {
@@ -142,8 +144,8 @@ public class HomeFragment extends BaseFragment {
         } else {
             cardBackgroundColor = ResourcesKt.resolveColor(activity.getTheme(), R.attr.colorInstall);
             boolean isMagiskInstalled = ConfigManager.isMagiskInstalled();
-            binding.statusTitle.setText(isMagiskInstalled ? R.string.Install : R.string.NotInstall);
-            binding.statusSummary.setText(isMagiskInstalled ? R.string.InstallDetail : R.string.NotInstallDetail);
+            binding.statusTitle.setText(isMagiskInstalled ? R.string.install : R.string.not_installed);
+            binding.statusSummary.setText(isMagiskInstalled ? R.string.install_summary : R.string.not_install_summary);
             if (!isMagiskInstalled) {
                 binding.status.setOnClickListener(null);
                 binding.download.setVisibility(View.GONE);

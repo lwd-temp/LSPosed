@@ -22,6 +22,8 @@ package org.lsposed.lspd.service;
 import static org.lsposed.lspd.service.PackageService.MATCH_ALL_FLAGS;
 import static org.lsposed.lspd.service.PackageService.PER_USER_RANGE;
 import static org.lsposed.lspd.service.ServiceManager.TAG;
+import static org.lsposed.lspd.service.ServiceManager.existsInGlobalNamespace;
+import static org.lsposed.lspd.service.ServiceManager.toGlobalNamespace;
 
 import android.content.ContentValues;
 import android.content.pm.ApplicationInfo;
@@ -60,12 +62,8 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
 import java.nio.file.Files;
-import java.nio.file.OpenOption;
-import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.PosixFilePermissions;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -74,76 +72,26 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.ZipFile;
 
-// This config manager assume uid won't change when our service is off.
-// Otherwise, user should maintain it manually.
 public class ConfigManager {
-
-    private static final String[] MANAGER_PERMISSIONS_TO_GRANT = new String[]{
-            "android.permission.INTERACT_ACROSS_USERS",
-            "android.permission.WRITE_SECURE_SETTINGS"
-    };
-
     private static ConfigManager instance = null;
 
-    private static final File basePath = new File("/data/adb/lspd");
-    private static final File configPath = new File(basePath, "config");
-    private static final File lockPath = new File(basePath, "lock");
-    private static final SQLiteDatabase db = SQLiteDatabase.openOrCreateDatabase(new File(configPath, "modules_config.db"), null);
+    private final SQLiteDatabase db =
+            SQLiteDatabase.openOrCreateDatabase(ConfigFileManager.dbPath, null);
 
     private boolean packageStarted = false;
 
-    private static final File resourceHookSwitch = new File(configPath, "enable_resources");
     private boolean resourceHook = false;
-
-    private static final File verboseLogSwitch = new File(configPath, "verbose_log");
-    private boolean verboseLog = false;
-
-    private static final File managerPath = new File(configPath, "manager");
-    private String manager = null;
-    private int managerUid = -1;
-
-    private static final File miscFile = new File(basePath, "misc_path");
+    private boolean verboseLog = true;
     private String miscPath = null;
 
-    private static final File logPath = new File(basePath, "log");
-    private static final File modulesLog = new File(logPath, "modules.log");
-    private static final File oldModulesLog = new File(logPath, "modules.old.log");
-    private static final File verboseLogPath = new File(logPath, "all.log");
-
-    static class FileLocker {
-        private final FileChannel lockChannel;
-        private final FileLock locker;
-
-        FileLocker(@NonNull FileChannel lockChannel) throws IOException {
-            this.lockChannel = lockChannel;
-            this.locker = lockChannel.tryLock();
-        }
-
-        boolean isValid() {
-            return this.locker != null && this.locker.isValid();
-        }
-
-        @Override
-        protected void finalize() throws Throwable {
-            this.locker.release();
-            this.lockChannel.close();
-        }
-    }
-
-    static FileLocker locker = null;
-
-
-    static {
-        try {
-            Files.createDirectories(basePath.toPath());
-        } catch (IOException e) {
-            Log.e(TAG, Log.getStackTraceString(e));
-        }
-    }
+    private final String manager = BuildConfig.DEFAULT_MANAGER_PACKAGE_NAME;
+    private int managerUid = -1;
 
     private final Handler cacheHandler;
 
@@ -179,26 +127,26 @@ public class ConfigManager {
         }
     }
 
-    private static final SQLiteStatement createModulesTable = db.compileStatement("CREATE TABLE IF NOT EXISTS modules (" +
+    private final SQLiteStatement createModulesTable = db.compileStatement("CREATE TABLE IF NOT EXISTS modules (" +
             "mid integer PRIMARY KEY AUTOINCREMENT," +
             "module_pkg_name text NOT NULL UNIQUE," +
             "apk_path text NOT NULL, " +
             "enabled BOOLEAN DEFAULT 0 " +
             "CHECK (enabled IN (0, 1))" +
             ");");
-    private static final SQLiteStatement createScopeTable = db.compileStatement("CREATE TABLE IF NOT EXISTS scope (" +
+    private final SQLiteStatement createScopeTable = db.compileStatement("CREATE TABLE IF NOT EXISTS scope (" +
             "mid integer," +
             "app_pkg_name text NOT NULL," +
             "user_id integer NOT NULL," +
             "PRIMARY KEY (mid, app_pkg_name, user_id)" +
             ");");
-    private static final SQLiteStatement createConfigTable = db.compileStatement("CREATE TABLE IF NOT EXISTS config (" +
+    private final SQLiteStatement createConfigTable = db.compileStatement("CREATE TABLE IF NOT EXISTS configs (" +
             "module_pkg_name text NOT NULL," +
             "user_id integer NOT NULL," +
             "`group` text NOT NULL," +
             "`key` text NOT NULL," +
             "data blob NOT NULL," +
-            "PRIMARY KEY (module_pkg_name, user_id)" +
+            "PRIMARY KEY (module_pkg_name, user_id, `group`, `key`)" +
             ");");
 
     private final Map<ProcessScope, List<Module>> cachedScope = new ConcurrentHashMap<>();
@@ -217,22 +165,6 @@ public class ConfigManager {
             cacheModules();
         } else {
             cacheHandler.post(this::cacheModules);
-        }
-    }
-
-    public boolean tryLock() {
-        var openOptions = new HashSet<OpenOption>();
-        openOptions.add(StandardOpenOption.CREATE);
-        openOptions.add(StandardOpenOption.WRITE);
-        var p = PosixFilePermissions.fromString("rw-------");
-        var permissions = PosixFilePermissions.asFileAttribute(p);
-
-        try {
-            var lockChannel = FileChannel.open(lockPath.toPath(), openOptions, permissions);
-            locker = new FileLocker(lockChannel);
-            return locker.isValid();
-        } catch (Throwable e) {
-            return false;
         }
     }
 
@@ -275,56 +207,40 @@ public class ConfigManager {
         return modules;
     }
 
-    private static String readText(@NonNull File file) throws IOException {
-        return new String(Files.readAllBytes(file.toPath())).trim();
-    }
-
-    private static String readText(@NonNull File file, String defaultValue) {
-        try {
-            if (!file.exists()) return defaultValue;
-            return readText(file);
-        } catch (IOException e) {
-            Log.e(TAG, Log.getStackTraceString(e));
-        }
-        return defaultValue;
-    }
-
-    private static void writeText(@NonNull File file, String value) {
-        try {
-            Files.write(file.toPath(), value.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-        } catch (IOException e) {
-            Log.e(TAG, Log.getStackTraceString(e));
-        }
-    }
-
-    private static int readInt(@NonNull File file, int defaultValue) {
-        try {
-            if (!file.exists()) return defaultValue;
-            return Integer.parseInt(readText(file));
-        } catch (IOException | NumberFormatException e) {
-            Log.e(TAG, Log.getStackTraceString(e));
-        }
-        return defaultValue;
-    }
-
-    private static void writeInt(@NonNull File file, int value) {
-        writeText(file, String.valueOf(value));
-    }
-
     private synchronized void updateConfig() {
-        resourceHook = readInt(resourceHookSwitch, 0) == 1;
-        verboseLog = readInt(verboseLogSwitch, 0) == 1;
-        miscPath = "/data/misc/" + readText(miscFile, "lspd");
+        ConfigFileManager.migrateOldConfig(this);
+        Map<String, Object> config = getModulePrefs("lspd", 0, "config");
+
+        Object bool = config.get("enable_resources");
+        resourceHook = bool != null && (boolean) bool;
+
+        bool = config.get("enable_verbose_log");
+        verboseLog = bool == null || (boolean) bool;
+
+        // Don't migrate to ConfigFileManager, as XSharedPreferences will be restored soon
+        String string = (String) config.get("misc_path");
+        if (string == null) {
+            miscPath = "/data/misc/" + UUID.randomUUID().toString();
+            updateModulePrefs("lspd", 0, "config", "misc_path", miscPath);
+        } else {
+            miscPath = string;
+        }
+        try {
+            Files.createDirectories(Paths.get(miscPath));
+            recursivelyContext(new File(miscPath), "u:object_r:magisk_file:s0");
+        } catch (IOException e) {
+            Log.e(TAG, Log.getStackTraceString(e));
+        }
+
         updateManager();
     }
 
     public synchronized void updateManager() {
         if (!packageStarted) return;
         try {
-            PackageInfo info = PackageService.getPackageInfo(readText(managerPath, BuildConfig.DEFAULT_MANAGER_PACKAGE_NAME), 0, 0);
+            PackageInfo info = PackageService.getPackageInfo(manager, 0, 0);
             if (info != null) {
                 managerUid = info.applicationInfo.uid;
-                manager = info.packageName;
             } else {
                 Log.w(TAG, "manager is not installed");
             }
@@ -335,16 +251,10 @@ public class ConfigManager {
     public void ensureManager() {
         if (!packageStarted) return;
         new Thread(() -> {
-            if (PackageService.installManagerIfAbsent(manager, new File(basePath, "manager.apk"))) {
-                updateManager(BuildConfig.DEFAULT_MANAGER_PACKAGE_NAME);
+            if (PackageService.installManagerIfAbsent(manager, ConfigFileManager.managerApkPath)) {
+                updateManager();
             }
         }).start();
-    }
-
-    public synchronized void updateManager(@NonNull String packageName) {
-        writeText(managerPath, packageName);
-        manager = packageName;
-        updateManager();
     }
 
     static ConfigManager getInstance() {
@@ -374,9 +284,14 @@ public class ConfigManager {
     }
 
     private void createTables() {
-        createModulesTable.execute();
-        createScopeTable.execute();
-        createConfigTable.execute();
+        try {
+            createModulesTable.execute();
+            createScopeTable.execute();
+            createConfigTable.execute();
+            db.compileStatement("CREATE INDEX IF NOT EXISTS configs_idx ON configs (module_pkg_name, user_id);").execute();
+        } catch (Throwable e) {
+            Log.e(TAG, "init db", e);
+        }
     }
 
     private List<ProcessScope> getAssociatedProcesses(Application app) throws RemoteException {
@@ -392,7 +307,7 @@ public class ConfigManager {
     Map<String, ConcurrentHashMap<String, Object>> fetchModuleConfig(String name, int user_id) {
         var config = new ConcurrentHashMap<String, ConcurrentHashMap<String, Object>>();
 
-        try (Cursor cursor = db.query("config", new String[]{"group", "key", "data"},
+        try (Cursor cursor = db.query("configs", new String[]{"`group`", "`key`", "data"},
                 "module_pkg_name = ? and user_id = ?", new String[]{name, String.valueOf(user_id)}, null, null, null)) {
             if (cursor == null) {
                 Log.e(TAG, "db cache failed");
@@ -419,19 +334,21 @@ public class ConfigManager {
         if (value instanceof Serializable) {
             prefs.put(key, value);
             var values = new ContentValues();
-            values.put("group", group);
-            values.put("key", key);
-            values.put("value", SerializationUtils.serialize((Serializable) value));
-            db.updateWithOnConflict("config", values, "module_pkg_name=? and user_id=?", new String[]{moduleName, String.valueOf(userId)}, SQLiteDatabase.CONFLICT_REPLACE);
+            values.put("`group`", group);
+            values.put("`key`", key);
+            values.put("data", SerializationUtils.serialize((Serializable) value));
+            values.put("module_pkg_name", moduleName);
+            values.put("user_id", String.valueOf(userId));
+            db.insertWithOnConflict("configs", null, values, SQLiteDatabase.CONFLICT_REPLACE);
         } else {
             prefs.remove(key);
-            db.delete("config", "module_pkg_name=? and user_id=?", new String[]{moduleName, String.valueOf(userId)});
+            db.delete("configs", "module_pkg_name=? and user_id=? and `group`=? and `key`=?", new String[]{moduleName, String.valueOf(userId), group, key});
         }
     }
 
     public ConcurrentHashMap<String, Object> getModulePrefs(String moduleName, int userId, String group) {
         var config = cachedConfig.computeIfAbsent(new Pair<>(moduleName, userId), module -> fetchModuleConfig(module.first, module.second));
-        return config.getOrDefault(group, null);
+        return config.getOrDefault(group, new ConcurrentHashMap<>());
     }
 
     private synchronized void cacheModules() {
@@ -450,16 +367,12 @@ public class ConfigManager {
             Set<String> obsoleteModules = new HashSet<>();
             // packageName, apkPath
             Map<String, String> obsoletePaths = new HashMap<>();
-            cachedModule.values().removeIf(m -> m.apkPath == null || !new File(m.apkPath).exists());
+            cachedModule.values().removeIf(m -> m.apkPath == null || !existsInGlobalNamespace(m.apkPath));
             while (cursor.moveToNext()) {
                 String packageName = cursor.getString(pkgNameIdx);
                 String apkPath = cursor.getString(apkPathIdx);
                 // if still present after removeIf, this package did not change.
                 var oldModule = cachedModule.get(packageName);
-                if (oldModule != null && oldModule.appId != -1) {
-                    Log.d(TAG, packageName + " did not change, skip caching it");
-                    continue;
-                }
                 PackageInfo pkgInfo = null;
                 try {
                     pkgInfo = PackageService.getPackageInfo(packageName, MATCH_ALL_FLAGS, 0);
@@ -470,25 +383,31 @@ public class ConfigManager {
                     obsoleteModules.add(packageName);
                     continue;
                 }
-                // cache from system server, keep it and set only the appId
-                if (oldModule != null) {
-                    oldModule.appId = pkgInfo.applicationInfo.uid;
+                if (oldModule != null &&
+                        pkgInfo.applicationInfo.sourceDir != null &&
+                        apkPath != null && oldModule.apkPath != null &&
+                        existsInGlobalNamespace(apkPath) &&
+                        Objects.equals(apkPath, oldModule.apkPath) &&
+                        Objects.equals(new File(pkgInfo.applicationInfo.sourceDir).getParent(), new File(apkPath).getParent())) {
+                    if (oldModule.appId != -1) {
+                        Log.d(TAG, packageName + " did not change, skip caching it");
+                    } else {
+                        // cache from system server, keep it and set only the appId
+                        oldModule.appId = pkgInfo.applicationInfo.uid;
+                    }
                     continue;
                 }
-                var path = apkPath;
-                if (!new File(path).exists()) {
-                    path = getModuleApkPath(pkgInfo.applicationInfo);
-                    if (path == null) obsoleteModules.add(packageName);
-                    else obsoletePaths.put(packageName, path);
-                }
-                var file = loadModule(path);
+                apkPath = getModuleApkPath(pkgInfo.applicationInfo);
+                if (apkPath == null) obsoleteModules.add(packageName);
+                else obsoletePaths.put(packageName, apkPath);
+                var file = loadModule(apkPath);
                 if (file == null) {
                     Log.w(TAG, "failed to load module " + packageName);
                     obsoleteModules.add(packageName);
                     continue;
                 }
                 var module = new Module();
-                module.apkPath = path;
+                module.apkPath = apkPath;
                 module.packageName = packageName;
                 module.file = file;
                 module.appId = pkgInfo.applicationInfo.uid;
@@ -621,11 +540,12 @@ public class ConfigManager {
 
     @Nullable
     private PreLoadedApk loadModule(String path) {
+        if (path == null) return null;
         var file = new PreLoadedApk();
         var preLoadedDexes = new ArrayList<SharedMemory>();
         var moduleClassNames = new ArrayList<String>(1);
         var moduleLibraryNames = new ArrayList<String>(1);
-        try (var apkFile = new ZipFile(path)) {
+        try (var apkFile = new ZipFile(toGlobalNamespace(path))) {
             readDexes(apkFile, preLoadedDexes);
             readName(apkFile, "assets/xposed_init", moduleClassNames);
             readName(apkFile, "assets/native_init", moduleLibraryNames);
@@ -648,14 +568,16 @@ public class ConfigManager {
 
     // This is called when a new process created, use the cached result
     public boolean shouldSkipProcess(ProcessScope scope) {
-        return !cachedScope.containsKey(scope) && !isManager(scope.uid);
+        return !cachedScope.containsKey(scope) &&
+                !isManager(scope.uid) &&
+                !shouldBlock(scope.processName);
     }
 
     public boolean isUidHooked(int uid) {
         return cachedScope.keySet().stream().reduce(false, (p, scope) -> p || scope.uid == uid, Boolean::logicalOr);
     }
 
-    // This should only be called by manager, so we don't need to cache it
+    @Nullable
     public List<Application> getModuleScope(String packageName) {
         int mid = getModuleId(packageName);
         if (mid == -1) return null;
@@ -685,7 +607,11 @@ public class ConfigManager {
             apks[info.splitSourceDirs.length] = info.sourceDir;
         } else apks = new String[]{info.sourceDir};
         var apkPath = Arrays.stream(apks).parallel().filter(apk -> {
-            try (var zip = new ZipFile(apk)) {
+            if (apk == null) {
+                Log.w(TAG, info.packageName + " has null apk path???");
+                return false;
+            }
+            try (var zip = new ZipFile(toGlobalNamespace(apk))) {
                 return zip.getEntry("assets/xposed_init") != null;
             } catch (IOException e) {
                 return false;
@@ -700,9 +626,11 @@ public class ConfigManager {
             Log.w(TAG, "update module apk path should not be called inside transaction");
             return false;
         }
+
         ContentValues values = new ContentValues();
         values.put("module_pkg_name", packageName);
         values.put("apk_path", apkPath);
+        // insert or update in two step since insert or replace will change the autoincrement mid
         int count = (int) db.insertWithOnConflict("modules", null, values, SQLiteDatabase.CONFLICT_IGNORE);
         if (count < 0) {
             count = db.updateWithOnConflict("modules", values, "module_pkg_name=?", new String[]{packageName}, SQLiteDatabase.CONFLICT_IGNORE);
@@ -772,11 +700,13 @@ public class ConfigManager {
         }
     }
 
-    public void removeModule(String packageName) {
+    public boolean removeModule(String packageName) {
         if (removeModuleWithoutCache(packageName)) {
             // called by oneway binder
             updateCaches(true);
+            return true;
         }
+        return false;
     }
 
     private boolean removeModuleWithoutCache(String packageName) {
@@ -857,13 +787,19 @@ public class ConfigManager {
     }
 
     public void setResourceHook(boolean resourceHook) {
-        writeInt(resourceHookSwitch, resourceHook ? 1 : 0);
+        updateModulePrefs("lspd", 0, "config", "enable_resources", resourceHook);
         this.resourceHook = resourceHook;
     }
 
-    public void setVerboseLog(boolean verboseLog) {
-        writeInt(verboseLogSwitch, verboseLog ? 1 : 0);
-        this.verboseLog = verboseLog;
+    public void setVerboseLog(boolean on) {
+        var logcatService = ServiceManager.getLogcatService();
+        if (on) {
+            logcatService.startVerbose();
+        } else {
+            logcatService.stopVerbose();
+        }
+        updateModulePrefs("lspd", 0, "config", "enable_verbose_log", on);
+        verboseLog = on;
     }
 
     public boolean resourceHook() {
@@ -874,13 +810,11 @@ public class ConfigManager {
         return verboseLog;
     }
 
-    public ParcelFileDescriptor getModulesLog(int mode) {
+    public ParcelFileDescriptor getModulesLog() {
         try {
-            if (modulesLog.length() > 16 * 1024 * 1024) {
-                //noinspection ResultOfMethodCallIgnored
-                modulesLog.renameTo(oldModulesLog);
-            }
-            return ParcelFileDescriptor.open(modulesLog, mode | ParcelFileDescriptor.MODE_CREATE);
+            var modulesLog = ServiceManager.getLogcatService().getModulesLog();
+            if (modulesLog == null) return null;
+            return ParcelFileDescriptor.open(modulesLog, ParcelFileDescriptor.MODE_READ_ONLY);
         } catch (IOException e) {
             Log.e(TAG, Log.getStackTraceString(e));
             return null;
@@ -889,7 +823,9 @@ public class ConfigManager {
 
     public ParcelFileDescriptor getVerboseLog() {
         try {
-            return ParcelFileDescriptor.open(verboseLogPath, ParcelFileDescriptor.MODE_READ_ONLY);
+            var verboseLog = ServiceManager.getLogcatService().getVerboseLog();
+            if (verboseLog == null) return null;
+            return ParcelFileDescriptor.open(verboseLog, ParcelFileDescriptor.MODE_READ_ONLY);
         } catch (FileNotFoundException e) {
             Log.e(TAG, Log.getStackTraceString(e));
             return null;
@@ -897,8 +833,11 @@ public class ConfigManager {
     }
 
     public boolean clearLogs(boolean verbose) {
+        var logcatService = ServiceManager.getLogcatService();
+        File logFile = verbose ? logcatService.getVerboseLog() : logcatService.getModulesLog();
+        if (logFile == null) return true;
         try {
-            OutputStream os = new FileOutputStream(verbose ? verboseLogPath : modulesLog);
+            OutputStream os = new FileOutputStream(logFile);
             os.close();
             return true;
         } catch (IOException e) {
@@ -908,7 +847,7 @@ public class ConfigManager {
     }
 
     public boolean isManager(String packageName) {
-        return packageName.equals(manager) || packageName.equals(BuildConfig.DEFAULT_MANAGER_PACKAGE_NAME);
+        return packageName.equals(manager);
     }
 
     public boolean isManager(int uid) {
@@ -921,26 +860,15 @@ public class ConfigManager {
 
     public String getPrefsPath(String fileName, int uid) {
         int userId = uid / PER_USER_RANGE;
-        return miscPath + File.separator + "prefs" + (userId == 0 ? "" : String.valueOf(userId)) + File.separator + fileName;
-    }
-
-    public static void grantManagerPermission() {
-        String managerPackageName = readText(managerPath, BuildConfig.DEFAULT_MANAGER_PACKAGE_NAME);
-        Arrays.stream(MANAGER_PERMISSIONS_TO_GRANT).forEach(permission -> {
-            try {
-                PackageService.grantRuntimePermission(managerPackageName, permission, 0);
-            } catch (RemoteException e) {
-                Log.e(TAG, Log.getStackTraceString(e));
-            }
-        });
+        return miscPath + "/prefs" + (userId == 0 ? "" : String.valueOf(userId)) + "/" + fileName;
     }
 
     // this is slow, avoid using it
-    public boolean isModule(int uid) {
+    public String getModule(int uid) {
         for (var module : cachedModule.values()) {
-            if (module.appId == uid % PER_USER_RANGE) return true;
+            if (module.appId == uid % PER_USER_RANGE) return module.packageName;
         }
-        return false;
+        return null;
     }
 
     public boolean isModule(int uid, String name) {
@@ -953,6 +881,15 @@ public class ConfigManager {
         if (file.isDirectory()) {
             for (File subFile : file.listFiles()) {
                 recursivelyChown(subFile, uid, gid);
+            }
+        }
+    }
+
+    private void recursivelyContext(File file, String context) {
+        SELinux.setFileContext(file.getPath(), context);
+        if (file.isDirectory()) {
+            for (File subFile : file.listFiles()) {
+                recursivelyContext(subFile, context);
             }
         }
     }

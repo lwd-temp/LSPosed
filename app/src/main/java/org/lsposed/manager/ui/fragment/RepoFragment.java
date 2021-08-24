@@ -97,7 +97,6 @@ public class RepoFragment extends BaseFragment implements RepoLoader.Listener {
         binding.recyclerView.setAdapter(adapter);
         binding.recyclerView.setHasFixedSize(true);
         binding.recyclerView.setLayoutManager(new LinearLayoutManagerFix(requireActivity()));
-        RecyclerViewKt.addFastScroller(binding.recyclerView, binding.recyclerView);
         RecyclerViewKt.fixEdgeEffect(binding.recyclerView, false, true);
         binding.progress.setVisibilityAfterHide(View.GONE);
         repoLoader.addListener(this);
@@ -186,7 +185,11 @@ public class RepoFragment extends BaseFragment implements RepoLoader.Listener {
                 sb.append(summary);
             }
             holder.appDescription.setText(sb);
-            holder.itemView.setOnClickListener(v -> getNavController().navigate(RepoFragmentDirections.actionRepoFragmentToRepoItemFragment(module.getName(), module.getDescription())));
+            holder.itemView.setOnClickListener(v -> {
+                searchView.clearFocus();
+                searchView.onActionViewCollapsed();
+                getNavController().navigate(RepoFragmentDirections.actionRepoFragmentToRepoItemFragment(module.getName(), module.getDescription()));
+            });
         }
 
         @Override

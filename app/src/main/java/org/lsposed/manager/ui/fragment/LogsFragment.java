@@ -45,11 +45,9 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.tabs.TabLayout;
 
-import org.lsposed.manager.App;
 import org.lsposed.manager.BuildConfig;
 import org.lsposed.manager.ConfigManager;
 import org.lsposed.manager.R;
-import org.lsposed.manager.databinding.DialogInstallWarningBinding;
 import org.lsposed.manager.databinding.FragmentLogsBinding;
 import org.lsposed.manager.databinding.ItemLogBinding;
 import org.lsposed.manager.util.LinearLayoutManagerFix;
@@ -69,8 +67,6 @@ import java.util.List;
 import java.util.Locale;
 
 import rikka.core.os.FileUtils;
-import rikka.core.res.ResourcesKt;
-import rikka.insets.WindowInsetsHelperKt;
 import rikka.recyclerview.RecyclerViewKt;
 
 @SuppressLint("NotifyDataSetChanged")
@@ -116,28 +112,23 @@ public class LogsFragment extends BaseFragment {
         binding.recyclerView.getBorderViewDelegate().setBorderVisibilityChangedListener((top, oldTop, bottom, oldBottom) -> binding.appBar.setRaised(!top));
 
 
-        if (!ConfigManager.isVerboseLogEnabled()) {
-            WindowInsetsHelperKt.setInitialPadding(binding.recyclerView, 0, ResourcesKt.resolveDimensionPixelOffset(requireActivity().getTheme(), R.attr.actionBarSize, 0), 0, 0);
-            binding.slidingTabs.setVisibility(View.GONE);
-        } else {
-            binding.slidingTabs.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
-                @Override
-                public void onTabSelected(TabLayout.Tab tab) {
-                    verbose = tab.getPosition() == 1;
-                    reloadErrorLog();
-                }
+        binding.slidingTabs.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                verbose = tab.getPosition() == 1;
+                reloadErrorLog();
+            }
 
-                @Override
-                public void onTabUnselected(TabLayout.Tab tab) {
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {
 
-                }
+            }
 
-                @Override
-                public void onTabReselected(TabLayout.Tab tab) {
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {
 
-                }
-            });
-        }
+            }
+        });
 
         adapter = new LogsAdapter();
         RecyclerViewKt.fixEdgeEffect(binding.recyclerView, false, true);
@@ -145,27 +136,6 @@ public class LogsFragment extends BaseFragment {
         layoutManager = new LinearLayoutManagerFix(requireActivity());
         binding.recyclerView.setLayoutManager(layoutManager);
         return binding.getRoot();
-    }
-
-    @Override
-    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-        super.onViewCreated(view, savedInstanceState);
-
-        if (!App.getPreferences().getBoolean("hide_logcat_warning", false)) {
-            DialogInstallWarningBinding binding = DialogInstallWarningBinding.inflate(getLayoutInflater());
-            binding.getRoot().setOnClickListener(v -> binding.checkbox.toggle());
-            new AlertDialog.Builder(requireActivity())
-                    .setMessage(R.string.not_logcat_2)
-                    .setView(binding.getRoot())
-                    .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                        if (binding.checkbox.isChecked()) {
-                            App.getPreferences().edit().putBoolean("hide_logcat_warning", true).apply();
-                        }
-                    })
-                    .setCancelable(false)
-                    .show();
-        }
-
     }
 
     @Override
