@@ -324,8 +324,8 @@ public class LogsFragment extends BaseFragment {
         }
 
         void clearLogs() {
-            logs.clear();
             notifyItemRangeRemoved(0, logs.size());
+            logs.clear();
         }
 
         @Override
